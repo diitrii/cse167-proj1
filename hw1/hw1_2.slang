@@ -23,38 +23,63 @@ void compute_main(uint2 tid: SV_DispatchThreadID,
     image[tid] = float4(1.0);
     float y = height - tid.y - 0.5;
     float x = tid.x + 0.5;
-    int winding_num = 0;
-    for (int i = 0; i < num_polyline; i++)
+    if (use_fill_color)
     {
-        float2 p0 = polyline[i];
-        float2 p1 = polyline[(i + 1) % num_polyline];
-        if ((p0.y > y) == (p1.y > y))
+        int winding_num = 0;
+        for (int i = 0; i < num_polyline; i++)
         {
-            continue;
-        }
-        float t = (y - p0.y) / (p1.y - p0.y);
-        float s = -x + p0.x + t * (p1.x - p0.x);
-        if (s > x)
-        {
-            if (p1.y > p0.y)
+            float2 p0 = polyline[i];
+            float2 p1 = polyline[(i + 1) % num_polyline];
+            if ((p0.y > y) == (p1.y > y))
             {
-                winding_num += 1;
+                continue;
             }
-            else
+            float t = (y - p0.y) / (p1.y - p0.y);
+            float s = -x + p0.x + t * (p1.x - p0.x);
+            if (s >= 0)
             {
-                winding_num -= 1;
+                if (p1.y > p0.y)
+                {
+                    winding_num += 1;
+                }
+                else
+                {
+                    winding_num -= 1;
+                }
             }
         }
-    }
-    if (winding_num != 0)
-    {
-        if (is_closed)
+        if (winding_num != 0)
         {
             image[tid] = float4(fill_color, 1.0);
         }
+    }
+    if (use_stroke_color)
+    {
+        int edge_count;
+        if (is_closed)
+        {
+            edge_count = num_polyline;
+        }
         else
         {
-            image[tid] = float4(stroke_color, 1.0);
+            edge_count = num_polyline - 1;
+        }
+        float2 q = float2(x, y);
+        for (int i = 0; i < edge_count; i++)
+        {
+
+            float2 p0 = polyline[i];
+            float2 p1 = polyline[(i + 1) % num_polyline];
+            float segment_len = length(p1 - p0);
+            if (segment_len > 0)
+            {
+                float l = dot(p1 - p0, q - p0) / segment_len;
+                float2 qp = p0 + l * ((p1 - p0) / segment_len);
+                if (l > 0 && l < segment_len && length(q - qp) < stroke_width / 2)
+                {
+                    image[tid] = float4(stroke_color, 1.0);
+                }
+            }
         }
     }
 
